@@ -170,7 +170,7 @@ class PdfBillGenerator {
                             padding: pw.EdgeInsets.all(4),
                             child: pw.Center(
                               child: pw.Text(
-                                'INR ${items[i].price.toStringAsFixed(2)}',
+                                '₹ ${items[i].price.toStringAsFixed(2)}',
                                 style: pw.TextStyle(font: font, fontSize: 12),
                               ),
                             ),
@@ -188,7 +188,7 @@ class PdfBillGenerator {
                             padding: pw.EdgeInsets.all(4),
                             child: pw.Center(
                               child: pw.Text(
-                                'INR ${items[i].total.toStringAsFixed(2)}',
+                                '₹ ${items[i].total.toStringAsFixed(2)}',
                                 style: pw.TextStyle(font: font, fontSize: 12),
                               ),
                             ),
