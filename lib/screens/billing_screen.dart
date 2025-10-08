@@ -317,7 +317,7 @@ class _BillingScreenState extends State<BillingScreen> {
       appBar: AppBar(
         title: Center(
           child: Text(
-            'Billing System',
+            'BillBlitz',
             style: GoogleFonts.inter(
               fontWeight: FontWeight.w700,
               color: Colors.white,
