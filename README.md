@@ -4,7 +4,7 @@
 
 # BillBlitz ⚡
 
-**Fast, clean billing for small shops.** BillBlitz is a Flutter + Firebase app for creating customer bills in seconds, saving them to the cloud, and printing or sharing them as professional PDF invoices. It runs on the web, Android, iOS and desktop from a single codebase.
+**Fast, clean billing for small shops.** BillBlitz is an app for creating customer bills in seconds, saving them to the cloud, and printing or sharing them as professional PDF invoices. It runs on Android, iOS, the web and Windows.
 
 <p align="center">
   <img src="docs/screenshots/07-desktop.png" alt="BillBlitz on desktop" width="760">
@@ -18,19 +18,6 @@
 
 A torn-edge receipt struck by a lightning bolt: bills created in a flash. Royal purple with an amber bolt.
 
-The logo is a 512 x 512 px image, used in the app's screens and as the launcher icon on Android, iOS and the web (Android gets an adaptive icon). It is drawn by code, so it can be tweaked and regenerated:
-
-```bash
-pip install pillow numpy
-python tool/generate_logo.py        # writes assets/images/*.png
-dart run flutter_launcher_icons     # applies the launcher icons to every platform
-```
-
-| File | Size | Use |
-| --- | --- | --- |
-| `assets/images/logo.png` | 512 x 512 | README and in-app logo |
-| `assets/images/launcher_icon.png` | 1024 x 1024 | iOS and legacy Android icon |
-| `assets/images/launcher_foreground.png` / `launcher_background.png` | 1024 x 1024 | Android adaptive icon layers |
 
 ## ✨ Features
 
@@ -84,114 +71,16 @@ dart run flutter_launcher_icons     # applies the launcher icons to every platfo
   <img src="docs/screenshots/08-pdf-invoice.png" alt="Generated PDF invoice" width="520">
 </p>
 
-> The screenshots are generated from the real widgets with sample data (see [Regenerating the screenshots](#-regenerating-the-screenshots)), so they always match the current UI.
+## 💻 Where it runs
 
-## 🛠️ Tech stack
-
-| Area | Choice |
+| Platform | Supported |
 | --- | --- |
-| UI | Flutter (Material 3), Inter font bundled as an asset |
-| Database | Cloud Firestore (`cloud_firestore`) |
-| PDF | `pdf` + `printing` (print dialog and share sheet) |
-| Local settings | `shared_preferences` |
-| Formatting | `intl` |
+| Android | Yes |
+| iOS | Yes |
+| Web (any modern browser) | Yes |
+| Windows | Yes |
 
-## 🚀 Getting started
-
-### Prerequisites
-
-- Flutter SDK (3.8 or newer) – check with `flutter --version`
-- A Firebase project with **Cloud Firestore** enabled
-
-### Setup
-
-```bash
-git clone <your-repo-url>
-cd BillBlitz
-flutter pub get
-
-# Connect your own Firebase project (regenerates lib/firebase_options.dart)
-dart pub global activate flutterfire_cli
-flutterfire configure
-
-flutter run            # pick a device, or: flutter run -d chrome
-flutter run -d windows # Windows desktop app
-flutter build windows --release   # -> build\windowsdunner\Release\
-```
-
-### Firestore rules
-
-The app uses two collections: `bills` and `counters` (a single `counters/bills` document that hands out the next bill number).
-
-> ⚠️ BillBlitz does not have a sign-in screen yet, so the app talks to Firestore anonymously. Only use open rules for local testing. Before going live, add Firebase Authentication and lock the rules down, for example:
-
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /bills/{bill}     { allow read, write: if request.auth != null; }
-    match /counters/{doc}   { allow read, write: if request.auth != null; }
-  }
-}
-```
-
-**Upgrading from an older version?** Existing bills keep working. On the first save the counter starts after your highest existing `BILL-xxxxxxxx` ID, and older bills without a stored payment method or rates are shown as *Cash* with rates derived from their amounts.
-
-### First run checklist
-
-1. Open **Shop settings** (store icon, top right) and enter your shop name, address, phone and default tax rate.
-2. Create a bill and tap **Save & Print**.
-
-## 🗂️ Project structure
-
-```
-lib/
-├── main.dart                     # App entry, Firebase init, wiring
-├── theme/app_theme.dart          # Colours, Material theme, gradient header
-├── models/                       # Bill, BillingItem, PaymentMethod, ShopProfile
-├── services/
-│   ├── bill_repository.dart      # BillRepository interface + Firestore implementation
-│   └── shop_profile_store.dart   # Shop details (shared_preferences)
-├── utils/
-│   ├── bill_calculator.dart      # Single source of truth for totals
-│   ├── formatters.dart           # ₹ / date formatting
-│   ├── pdf_bill_generator.dart   # Build / print / share the PDF invoice
-│   └── snackbar.dart             # One helper for all snackbars
-├── screens/                      # Billing, Saved bills, Shop settings
-└── widgets/                      # Section card, add-item form, item list, summary, bill sheet
-assets/fonts/                     # Inter (SIL OFL licence included)
-test/                             # Unit + widget tests, fake repository, screenshot generator
-tool/pdf_to_png.py                # Rasterises the sample PDF for the README
-```
-
-The screens only depend on the `BillRepository` interface, which is why they can be tested without Firebase.
-
-## ✅ Tests
-
-```bash
-flutter analyze
-flutter test
-```
-
-Covered: bill calculations (discount before tax, rounding, clamping), loading bills saved by older versions, the add-item validation, totals and quantity changes, undo on delete, saving (success and failure), and searching saved bills.
-
-## 🖼️ Regenerating the screenshots
-
-The screenshot test is skipped in a normal `flutter test`. To refresh `docs/screenshots/`:
-
-```bash
-flutter test test/screenshots --dart-define=SCREENSHOTS=true
-
-# PDF page -> PNG (needs: pip install pymupdf)
-python tool/pdf_to_png.py build/screenshots/invoice.pdf docs/screenshots/08-pdf-invoice.png
-```
-
-## 🔮 Ideas for later
-
-- Firebase Authentication and per-user data
-- GST split (CGST/SGST) and per-item tax rates
-- Edit an existing bill and export bills to CSV
-- Customer autocomplete and a sales dashboard
+Phones use the compact mobile layout. On the web and Windows the app adapts to the wider window.
 
 ---
 
