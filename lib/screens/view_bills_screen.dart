@@ -1,237 +1,341 @@
-import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:billing_system/models/bill_model.dart';
-import 'package:billing_system/services/firestore_service.dart';
-import 'package:billing_system/utils/pdf_bill_generator.dart';
+import 'package:billing_system/services/bill_repository.dart';
+import 'package:billing_system/services/shop_profile_store.dart';
+import 'package:billing_system/theme/app_theme.dart';
+import 'package:billing_system/utils/formatters.dart';
+import 'package:billing_system/widgets/bill_detail_sheet.dart';
+import 'package:flutter/material.dart';
 
-class ViewBillsScreen extends StatelessWidget {
-  const ViewBillsScreen({super.key});
+class ViewBillsScreen extends StatefulWidget {
+  final BillRepository repository;
+  final ShopProfileStore shopStore;
 
-  // Predefined list of color pairs for gradients
-  static const List<List<Color>> _colorPairs = [
-    [Color(0xFF6A1B9A), Color(0xFFAB47BC)], // Purple shades
-    [Color(0xFF2E7D32), Color(0xFF66BB6A)], // Green shades
-    [Color(0xFF0288D1), Color(0xFF4FC3F7)], // Blue shades
-    [Color(0xFFD81B60), Color(0xFFF06292)], // Pink shades
-    [Color(0xFFF57C00), Color(0xFFFFB300)], // Orange shades
-  ];
+  const ViewBillsScreen({
+    super.key,
+    required this.repository,
+    required this.shopStore,
+  });
 
-  // Generate a persistent color index based on billId
-  int _getColorIndex(String billId) {
-    int hash = billId.hashCode.abs();
-    return hash % _colorPairs.length;
+  @override
+  State<ViewBillsScreen> createState() => _ViewBillsScreenState();
+}
+
+class _ViewBillsScreenState extends State<ViewBillsScreen> {
+  final _searchController = TextEditingController();
+  late final Stream<List<Bill>> _stream = widget.repository.watchBills();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<Bill> _filter(List<Bill> bills) {
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) return bills;
+    return bills.where((b) {
+      return (b.id ?? '').toLowerCase().contains(q) ||
+          b.customerName.toLowerCase().contains(q) ||
+          b.customerPhone.toLowerCase().contains(q);
+    }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    final FirestoreService firestoreService = FirestoreService();
-    final screenWidth = MediaQuery.of(context).size.width;
-
-    // Responsive crossAxisCount and aspect ratio
-    int crossAxisCount;
-    double childAspectRatio;
-    if (screenWidth < 400) {
-      crossAxisCount = 1;
-      childAspectRatio = 1.6;
-    } else if (screenWidth < 600) {
-      crossAxisCount = 2;
-      childAspectRatio = 1.5;
-    } else if (screenWidth < 900) {
-      crossAxisCount = 3;
-      childAspectRatio = 1.4;
-    } else {
-      crossAxisCount = 4;
-      childAspectRatio = 1.4;
-    }
-
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          onPressed: () => Navigator.pop(context),
-          icon: Icon(Icons.arrow_back, color: Colors.white, size: 24),
-        ),
-        title: Center(
-          child: Text(
-            'Saved Bills',
-            style: GoogleFonts.inter(
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-              fontSize: 30,
-            ),
-          ),
-        ),
-        backgroundColor: Colors.deepPurple,
-        elevation: 0,
-        toolbarHeight: 48,
+        flexibleSpace: const GradientHeader(),
+        title: const Text('Saved bills'),
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: firestoreService.getBillsStream(),
+      body: StreamBuilder<List<Bill>>(
+        stream: _stream,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return Center(
-              child: Text(
-                'Error loading bills: ${snapshot.error}',
-                style: GoogleFonts.inter(
-                  fontWeight: FontWeight.w600,
-                  color: Colors.redAccent,
-                  fontSize: 14,
-                ),
-              ),
+            return _Message(
+              icon: Icons.cloud_off_outlined,
+              title: 'Could not load bills',
+              subtitle: '${snapshot.error}',
+              color: AppColors.danger,
             );
           }
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator());
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
           }
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return Center(
+
+          final all = snapshot.data!;
+          if (all.isEmpty) {
+            return const _Message(
+              icon: Icons.receipt_long_outlined,
+              title: 'No bills yet',
+              subtitle: 'Bills you save will show up here.',
+            );
+          }
+
+          final bills = _filter(all);
+          final revenue = bills.fold<double>(0, (sum, b) => sum + b.total);
+
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 760),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.receipt_long_outlined,
-                    size: 48,
-                    color: Colors.grey.shade400,
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'No Bills Found',
-                    style: GoogleFonts.inter(
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade600,
-                      fontSize: 14,
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: (v) => setState(() => _query = v),
+                      textInputAction: TextInputAction.search,
+                      decoration: InputDecoration(
+                        hintText: 'Search by customer, phone or bill ID',
+                        prefixIcon: const Icon(Icons.search),
+                        fillColor: Colors.white,
+                        suffixIcon: _query.isEmpty
+                            ? null
+                            : IconButton(
+                                tooltip: 'Clear search',
+                                icon: const Icon(Icons.close),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() => _query = '');
+                                },
+                              ),
+                      ),
                     ),
                   ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    child: _StatsRow(count: bills.length, revenue: revenue),
+                  ),
+                  Expanded(
+                    child: bills.isEmpty
+                        ? const _Message(
+                            icon: Icons.search_off,
+                            title: 'No matching bills',
+                            subtitle: 'Try a different name, phone or ID.',
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                            itemCount: bills.length,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(height: 10),
+                            itemBuilder: (context, i) => _BillTile(
+                              bill: bills[i],
+                              onTap: () => showBillDetailSheet(
+                                context,
+                                bill: bills[i],
+                                repository: widget.repository,
+                                shopStore: widget.shopStore,
+                              ),
+                            ),
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _StatsRow extends StatelessWidget {
+  final int count;
+  final double revenue;
+
+  const _StatsRow({required this.count, required this.revenue});
+
+  @override
+  Widget build(BuildContext context) {
+    Widget stat(String label, String value, IconData icon) => Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          gradient: AppColors.headerGradient,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: Colors.white70, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    'Create a new bill to get started',
-                    style: GoogleFonts.inter(
-                      fontWeight: FontWeight.w500,
-                      color: Colors.grey.shade500,
-                      fontSize: 12,
+                    label,
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                  const SizedBox(height: 2),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      value,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ],
               ),
-            );
-          }
-
-          final bills = snapshot.data!.docs;
-
-          return GridView.builder(
-            padding: EdgeInsets.all(12),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: crossAxisCount,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-              childAspectRatio: childAspectRatio,
             ),
-            itemCount: bills.length,
-            itemBuilder: (context, index) {
-              final billData = bills[index].data() as Map<String, dynamic>;
-              final bill = Bill.fromMap(billData);
-              final billId = bills[index].id;
-              final colorPair = _colorPairs[_getColorIndex(billId)];
+          ],
+        ),
+      ),
+    );
 
-              return InkWell(
-                onTap: () {
-                  PdfBillGenerator.generateAndPrintBill(
-                    context: context,
-                    billId: billId,
-                    items: bill.items,
-                    customerName: bill.customerName,
-                    customerPhone: bill.customerPhone,
-                    taxRate: bill.taxableAmount != 0
-                        ? bill.tax / bill.taxableAmount
-                        : 0.0,
-                    discountRate: bill.subtotal != 0
-                        ? bill.discount / bill.subtotal * 100
-                        : 0.0,
-                  );
-                },
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: colorPair,
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Bill ID: $billId',
-                          style: GoogleFonts.inter(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 18,
-                            color: Colors.white,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'Customer: ${bill.customerName}',
-                          style: GoogleFonts.inter(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                            color: Colors.white,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'Total: INR  ${bill.total.toStringAsFixed(2)}',
-                          style: GoogleFonts.inter(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
-                            color: Colors.white,
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'Date: ${bill.date.toString().split(' ')[0]} ${bill.date.toString().split(' ')[1].substring(0, 5)}',
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            color: Colors.white.withOpacity(0.8),
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Align(
-                          alignment: Alignment.bottomRight,
-                          child: Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 4,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.3),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(
-                                color: Colors.white.withOpacity(0.5),
-                              ),
-                            ),
-                            child: Text(
-                              'View PDF',
-                              style: GoogleFonts.inter(
-                                fontSize: 14,
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+    return Row(
+      children: [
+        stat('Bills', '$count', Icons.receipt_long_outlined),
+        const SizedBox(width: 12),
+        stat(
+          'Total value',
+          Fmt.money(revenue),
+          Icons.account_balance_wallet_outlined,
+        ),
+      ],
+    );
+  }
+}
+
+class _BillTile extends StatelessWidget {
+  final Bill bill;
+  final VoidCallback onTap;
+
+  const _BillTile({required this.bill, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final initial = bill.customerName.isEmpty
+        ? '?'
+        : bill.customerName[0].toUpperCase();
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: AppColors.primarySoft,
+                foregroundColor: AppColors.primary,
+                child: Text(
+                  initial,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
-              );
-            },
-          );
-        },
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      bill.customerName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${bill.id ?? ''} · ${Fmt.shortDateTime(bill.date)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    Fmt.money(bill.total),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        bill.paymentMethod.icon,
+                        size: 13,
+                        color: AppColors.textMuted,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${bill.items.length} ${bill.items.length == 1 ? 'item' : 'items'}',
+                        style: const TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Message extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+
+  const _Message({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.color = AppColors.textMuted,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 48, color: color),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.textMuted),
+            ),
+          ],
+        ),
       ),
     );
   }

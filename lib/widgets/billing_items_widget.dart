@@ -1,185 +1,257 @@
-import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:billing_system/models/billing_item_model.dart';
+import 'package:billing_system/theme/app_theme.dart';
+import 'package:billing_system/utils/formatters.dart';
+import 'package:billing_system/widgets/section_card.dart';
+import 'package:flutter/material.dart';
 
 class BillingItemsWidget extends StatelessWidget {
   final List<BillingItem> items;
-  final Function(int) onRemoveItem;
+  final ValueChanged<int> onRemoveItem;
+  final void Function(int index, int quantity) onQuantityChanged;
 
   const BillingItemsWidget({
     super.key,
     required this.items,
     required this.onRemoveItem,
+    required this.onQuantityChanged,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-      child: Padding(
-        padding: EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.list_alt, size: 20, color: Colors.deepPurple),
-                SizedBox(width: 4),
-                Text(
-                  'Billing Items',
-                  style: GoogleFonts.inter(
+    return SectionCard(
+      icon: Icons.list_alt,
+      title: 'Items',
+      trailing: items.isEmpty
+          ? null
+          : Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.primarySoft,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '${items.length} ${items.length == 1 ? 'item' : 'items'}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+      child: items.isEmpty
+          ? const _EmptyItems()
+          : ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: items.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 8),
+              itemBuilder: (context, index) => _ItemRow(
+                index: index,
+                item: items[index],
+                onRemove: () => onRemoveItem(index),
+                onQuantityChanged: (q) => onQuantityChanged(index, q),
+              ),
+            ),
+    );
+  }
+}
+
+class _EmptyItems extends StatelessWidget {
+  const _EmptyItems();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 22),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAF9FE),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: const Column(
+        children: [
+          Icon(
+            Icons.shopping_cart_outlined,
+            size: 30,
+            color: AppColors.textMuted,
+          ),
+          SizedBox(height: 8),
+          Text(
+            'No items yet',
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          SizedBox(height: 2),
+          Text(
+            'Add an item above to start the bill',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ItemRow extends StatelessWidget {
+  final int index;
+  final BillingItem item;
+  final VoidCallback onRemove;
+  final ValueChanged<int> onQuantityChanged;
+
+  const _ItemRow({
+    required this.index,
+    required this.item,
+    required this.onRemove,
+    required this.onQuantityChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Two lines so long names get the full width, even on a phone:
+    //   [1] Item name ........................ [delete]
+    //       ₹640.00 each      [- 2 +]          ₹1,280.00
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAF9FE),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 26,
+                height: 26,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '${index + 1}',
+                  style: const TextStyle(
+                    color: Colors.white,
                     fontWeight: FontWeight.w600,
-                    color: Colors.deepPurple,
-                    fontSize: 20,
+                    fontSize: 12,
                   ),
                 ),
-                Spacer(),
-                if (items.isNotEmpty)
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.deepPurple.shade100,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      '${items.length} items',
-                      style: GoogleFonts.inter(
-                        fontWeight: FontWeight.w600,
-                        color: Colors.deepPurple,
-                        fontSize: 12,
-                      ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  item.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Remove item',
+                onPressed: onRemove,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.delete_outline, size: 20),
+                color: AppColors.danger,
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 38, right: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${Fmt.money(item.price)} each',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 12.5,
                     ),
                   ),
+                ),
+                _QuantityStepper(
+                  quantity: item.quantity,
+                  onChanged: onQuantityChanged,
+                ),
+                const SizedBox(width: 12),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: 84),
+                  child: Text(
+                    Fmt.money(item.total),
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
               ],
             ),
-            SizedBox(height: 8),
-            if (items.isEmpty)
-              Container(
-                width: double.infinity,
-                padding: EdgeInsets.all(12),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.shopping_cart_outlined,
-                      size: 24,
-                      color: Colors.grey.shade400,
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'No Items Added Yet',
-                      style: GoogleFonts.inter(
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade600,
-                        fontSize: 14,
-                      ),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      'Add items to create your bill',
-                      style: GoogleFonts.inter(
-                        fontWeight: FontWeight.w500,
-                        color: Colors.grey.shade500,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            else
-              ListView.separated(
-                shrinkWrap: true,
-                physics: NeverScrollableScrollPhysics(),
-                itemCount: items.length,
-                separatorBuilder: (context, index) => SizedBox(height: 4),
-                itemBuilder: (context, index) {
-                  final item = items[index];
-                  return Container(
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey.shade200),
-                    ),
-                    child: ListTile(
-                      contentPadding: EdgeInsets.symmetric(
-                        vertical: 4,
-                        horizontal: 12,
-                      ),
-                      leading: Container(
-                        width: 20,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          color: Colors.deepPurple,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Center(
-                          child: Text(
-                            '${index + 1}',
-                            style: GoogleFonts.inter(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w500,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ),
-                      ),
-                      title: Text(
-                        item.name,
-                        style: GoogleFonts.inter(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text(
-                        'INR ${item.price.toStringAsFixed(2)} X ${item.quantity}',
-                        style: GoogleFonts.inter(
-                          color: Colors.grey.shade600,
-                          fontSize: 14,
-                        ),
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            padding: EdgeInsets.symmetric(
-                              vertical: 4,
-                              horizontal: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.green.shade100,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              'INR ${item.total.toStringAsFixed(2)}',
-                              style: GoogleFonts.inter(
-                                fontWeight: FontWeight.w600,
-                                color: Colors.green.shade700,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                          SizedBox(width: 4),
-                          IconButton(
-                            onPressed: () => onRemoveItem(index),
-                            icon: Icon(
-                              Icons.delete_outline,
-                              color: Colors.redAccent,
-                              size: 16,
-                            ),
-                            style: IconButton.styleFrom(
-                              backgroundColor: Colors.white,
-                              foregroundColor: Colors.redAccent,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuantityStepper extends StatelessWidget {
+  final int quantity;
+  final ValueChanged<int> onChanged;
+
+  const _QuantityStepper({required this.quantity, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    Widget button(IconData icon, String tip, VoidCallback? onTap) => InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Tooltip(
+        message: tip,
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: Icon(
+            icon,
+            size: 16,
+            color: onTap == null ? AppColors.border : AppColors.primary,
+          ),
         ),
+      ),
+    );
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          button(
+            Icons.remove,
+            'Decrease quantity',
+            quantity > 1 ? () => onChanged(quantity - 1) : null,
+          ),
+          SizedBox(
+            width: 28,
+            child: Text(
+              '$quantity',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+            ),
+          ),
+          button(Icons.add, 'Increase quantity', () => onChanged(quantity + 1)),
+        ],
       ),
     );
   }

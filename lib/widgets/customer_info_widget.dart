@@ -1,5 +1,6 @@
+import 'package:billing_system/widgets/section_card.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter/services.dart';
 
 class CustomerInfoWidget extends StatelessWidget {
   final TextEditingController customerNameController;
@@ -11,117 +12,76 @@ class CustomerInfoWidget extends StatelessWidget {
     required this.customerPhoneController,
   });
 
+  /// Phone is optional, but when given it must look like a phone number.
+  static String? validatePhone(String? value) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty) return null;
+    final digits = text.replaceAll(RegExp(r'\D'), '');
+    if (digits.length < 7 || digits.length > 15) {
+      return 'Enter a valid phone number';
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-      child: Padding(
-        padding: EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.person, size: 20, color: Colors.deepPurple),
-                SizedBox(width: 4),
-                Text(
-                  'Customer Information',
-                  style: GoogleFonts.inter(
-                    fontWeight: FontWeight.w600,
-                    color: Colors.deepPurple,
-                    fontSize: 20,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 8),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                return constraints.maxWidth < 600
-                    ? Column(
-                        children: [
-                          TextField(
-                            controller: customerNameController,
-                            decoration: InputDecoration(
-                              labelText: 'Customer Name',
-                              hintText: 'Enter customer name',
-                              prefixIcon: Icon(Icons.person_outline, size: 24),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              filled: true,
-                              fillColor: Colors.grey.shade50,
-                            ),
-                            style: GoogleFonts.inter(fontSize: 14),
-                          ),
-                          SizedBox(height: 4),
-                          TextField(
-                            controller: customerPhoneController,
-                            decoration: InputDecoration(
-                              labelText: 'Customer Phone',
-                              hintText: 'Enter customer phone',
-                              prefixIcon: Icon(Icons.phone_outlined, size: 24),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              filled: true,
-                              fillColor: Colors.grey.shade50,
-                            ),
-                            keyboardType: TextInputType.phone,
-                            style: GoogleFonts.inter(fontSize: 14),
-                          ),
-                        ],
-                      )
-                    : Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: customerNameController,
-                              decoration: InputDecoration(
-                                labelText: 'Customer Name',
-                                hintText: 'Enter customer name',
-                                prefixIcon: Icon(
-                                  Icons.person_outline,
-                                  size: 24,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                filled: true,
-                                fillColor: Colors.grey.shade50,
-                              ),
-                              style: GoogleFonts.inter(fontSize: 14),
-                            ),
-                          ),
-                          SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              controller: customerPhoneController,
-                              decoration: InputDecoration(
-                                labelText: 'Customer Phone',
-                                hintText: 'Enter customer phone',
-                                prefixIcon: Icon(
-                                  Icons.phone_outlined,
-                                  size: 24,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                filled: true,
-                                fillColor: Colors.grey.shade50,
-                              ),
-                              keyboardType: TextInputType.phone,
-                              style: GoogleFonts.inter(fontSize: 14),
-                            ),
-                          ),
-                        ],
-                      );
-              },
-            ),
-          ],
-        ),
+    final nameField = TextFormField(
+      controller: customerNameController,
+      textInputAction: TextInputAction.next,
+      textCapitalization: TextCapitalization.words,
+      maxLength: 60,
+      buildCounter: _noCounter,
+      decoration: const InputDecoration(
+        labelText: 'Customer name',
+        hintText: 'Walk-in Customer',
+        prefixIcon: Icon(Icons.person_outline),
+      ),
+    );
+    final phoneField = TextFormField(
+      controller: customerPhoneController,
+      keyboardType: TextInputType.phone,
+      textInputAction: TextInputAction.next,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
+      validator: validatePhone,
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(r'[0-9+\-\s]')),
+      ],
+      maxLength: 20,
+      buildCounter: _noCounter,
+      decoration: const InputDecoration(
+        labelText: 'Phone (optional)',
+        hintText: '98765 43210',
+        prefixIcon: Icon(Icons.phone_outlined),
+      ),
+    );
+
+    return SectionCard(
+      icon: Icons.person_outline,
+      title: 'Customer',
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 520) {
+            return Column(
+              children: [nameField, const SizedBox(height: 12), phoneField],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: nameField),
+              const SizedBox(width: 12),
+              Expanded(child: phoneField),
+            ],
+          );
+        },
       ),
     );
   }
+
+  static Widget? _noCounter(
+    BuildContext context, {
+    required int currentLength,
+    required bool isFocused,
+    required int? maxLength,
+  }) => null;
 }

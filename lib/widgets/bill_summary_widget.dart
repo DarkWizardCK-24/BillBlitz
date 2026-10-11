@@ -1,222 +1,219 @@
+import 'package:billing_system/models/payment_method.dart';
+import 'package:billing_system/theme/app_theme.dart';
+import 'package:billing_system/utils/bill_calculator.dart';
+import 'package:billing_system/utils/formatters.dart';
+import 'package:billing_system/widgets/section_card.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter/services.dart';
 
+/// Discount / tax inputs, payment method and the live totals.
 class BillSummaryWidget extends StatelessWidget {
-  final double subtotal;
-  final double discount;
-  final double taxableAmount;
-  final double tax;
-  final double total;
-  final double taxRate;
-  final double discountRate;
-  final ValueChanged<String> onDiscountChanged;
-  final ValueChanged<String> onTaxRateChanged;
+  final BillTotals totals;
+  final double taxPercent;
+  final double discountPercent;
+  final TextEditingController discountController;
+  final TextEditingController taxController;
+  final PaymentMethod paymentMethod;
+  final ValueChanged<PaymentMethod> onPaymentMethodChanged;
+  final VoidCallback onRatesChanged;
 
   const BillSummaryWidget({
     super.key,
-    required this.subtotal,
-    required this.discount,
-    required this.taxableAmount,
-    required this.tax,
-    required this.total,
-    required this.taxRate,
-    required this.discountRate,
-    required this.onDiscountChanged,
-    required this.onTaxRateChanged,
+    required this.totals,
+    required this.taxPercent,
+    required this.discountPercent,
+    required this.discountController,
+    required this.taxController,
+    required this.paymentMethod,
+    required this.onPaymentMethodChanged,
+    required this.onRatesChanged,
   });
 
-  Widget buildSummaryRow(
-    BuildContext context,
-    String label,
-    double amount, {
-    bool isTotal = false,
-  }) {
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  static final _percentFormatter = FilteringTextInputFormatter.allow(
+    RegExp(r'^\d{0,3}\.?\d{0,2}'),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final discountField = TextField(
+      controller: discountController,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: [_percentFormatter],
+      onChanged: (_) => onRatesChanged(),
+      decoration: const InputDecoration(
+        labelText: 'Discount',
+        hintText: '0',
+        suffixText: '%',
+        prefixIcon: Icon(Icons.local_offer_outlined),
+      ),
+    );
+    final taxField = TextField(
+      controller: taxController,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: [_percentFormatter],
+      onChanged: (_) => onRatesChanged(),
+      decoration: const InputDecoration(
+        labelText: 'Tax',
+        hintText: '0',
+        suffixText: '%',
+        prefixIcon: Icon(Icons.account_balance_outlined),
+      ),
+    );
+
+    return SectionCard(
+      icon: Icons.receipt_long_outlined,
+      title: 'Summary',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: GoogleFonts.inter(
-              fontSize: isTotal ? 16 : 14,
-              fontWeight: isTotal ? FontWeight.bold : FontWeight.w600,
-              color: isTotal ? Colors.deepPurple : Colors.blueGrey.shade700,
+          Row(
+            children: [
+              Expanded(child: discountField),
+              const SizedBox(width: 12),
+              Expanded(child: taxField),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Payment method',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textMuted,
             ),
           ),
-          Text(
-            'INR ${amount.toStringAsFixed(2)}',
-            style: GoogleFonts.inter(
-              fontSize: isTotal ? 16 : 14,
-              fontWeight: isTotal ? FontWeight.bold : FontWeight.w600,
-              color: isTotal ? Colors.deepPurple : Colors.blueGrey.shade700,
-            ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final method in PaymentMethod.values)
+                ChoiceChip(
+                  avatar: Icon(
+                    method.icon,
+                    size: 18,
+                    color: method == paymentMethod
+                        ? AppColors.primary
+                        : AppColors.textMuted,
+                  ),
+                  label: Text(method.label),
+                  selected: method == paymentMethod,
+                  showCheckmark: false,
+                  selectedColor: AppColors.primarySoft,
+                  backgroundColor: Colors.white,
+                  side: BorderSide(
+                    color: method == paymentMethod
+                        ? AppColors.primary
+                        : AppColors.border,
+                  ),
+                  labelStyle: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: method == paymentMethod
+                        ? AppColors.primary
+                        : AppColors.textPrimary,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  onSelected: (_) => onPaymentMethodChanged(method),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          TotalsBox(
+            totals: totals,
+            taxPercent: taxPercent,
+            discountPercent: discountPercent,
           ),
         ],
       ),
     );
   }
+}
+
+/// The subtotal -> total breakdown. Also used on the saved-bill sheet.
+class TotalsBox extends StatelessWidget {
+  final BillTotals totals;
+  final double taxPercent;
+  final double discountPercent;
+
+  const TotalsBox({
+    super.key,
+    required this.totals,
+    required this.taxPercent,
+    required this.discountPercent,
+  });
+
+  Widget _row(String label, String value, {bool muted = false}) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: muted ? AppColors.textMuted : AppColors.textPrimary,
+          ),
+        ),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-      child: Padding(
-        padding: EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.receipt_long, size: 20, color: Colors.deepPurple),
-                SizedBox(width: 4),
-                Text(
-                  'Bill Summary',
-                  style: GoogleFonts.inter(
-                    fontWeight: FontWeight.w600,
-                    color: Colors.deepPurple,
-                    fontSize: 20,
-                  ),
-                ),
-              ],
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAF9FE),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        children: [
+          _row('Subtotal', Fmt.money(totals.subtotal), muted: true),
+          if (totals.discount > 0)
+            _row(
+              'Discount (${Fmt.percent(discountPercent)}%)',
+              '- ${Fmt.money(totals.discount)}',
+              muted: true,
             ),
-            SizedBox(height: 8),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                return constraints.maxWidth < 600
-                    ? Column(
-                        children: [
-                          AnimatedContainer(
-                            duration: Duration(milliseconds: 200),
-                            child: TextField(
-                              decoration: InputDecoration(
-                                labelText: 'Discount %',
-                                hintText: '0.0',
-                                prefixIcon: Icon(
-                                  Icons.local_offer_outlined,
-                                  size: 14,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                filled: true,
-                                fillColor: Colors.grey.shade50,
-                              ),
-                              keyboardType: TextInputType.numberWithOptions(
-                                decimal: true,
-                              ),
-                              onChanged: onDiscountChanged,
-                              style: GoogleFonts.inter(fontSize: 14),
-                            ),
-                          ),
-                          SizedBox(height: 4),
-                          AnimatedContainer(
-                            duration: Duration(milliseconds: 200),
-                            child: TextField(
-                              decoration: InputDecoration(
-                                labelText: 'Tax Rate',
-                                hintText: '10.0',
-                                prefixIcon: Icon(Icons.percent, size: 14),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                filled: true,
-                                fillColor: Colors.grey.shade50,
-                              ),
-                              keyboardType: TextInputType.numberWithOptions(
-                                decimal: true,
-                              ),
-                              onChanged: onTaxRateChanged,
-                              style: GoogleFonts.inter(fontSize: 14),
-                            ),
-                          ),
-                        ],
-                      )
-                    : Row(
-                        children: [
-                          Expanded(
-                            child: AnimatedContainer(
-                              duration: Duration(milliseconds: 200),
-                              child: TextField(
-                                decoration: InputDecoration(
-                                  labelText: 'Discount %',
-                                  hintText: '0.0',
-                                  prefixIcon: Icon(
-                                    Icons.local_offer_outlined,
-                                    size: 14,
-                                  ),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  filled: true,
-                                  fillColor: Colors.grey.shade50,
-                                ),
-                                keyboardType: TextInputType.numberWithOptions(
-                                  decimal: true,
-                                ),
-                                onChanged: onDiscountChanged,
-                                style: GoogleFonts.inter(fontSize: 14),
-                              ),
-                            ),
-                          ),
-                          SizedBox(width: 8),
-                          Expanded(
-                            child: AnimatedContainer(
-                              duration: Duration(milliseconds: 200),
-                              child: TextField(
-                                decoration: InputDecoration(
-                                  labelText: 'Tax Rate',
-                                  hintText: '10.0',
-                                  prefixIcon: Icon(Icons.percent, size: 14),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  filled: true,
-                                  fillColor: Colors.grey.shade50,
-                                ),
-                                keyboardType: TextInputType.numberWithOptions(
-                                  decimal: true,
-                                ),
-                                onChanged: onTaxRateChanged,
-                                style: GoogleFonts.inter(fontSize: 14),
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-              },
-            ),
-            SizedBox(height: 8),
-            Container(
-              padding: EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.grey.shade100, Colors.grey.shade50],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.grey.shade200),
+          _row('Taxable amount', Fmt.money(totals.taxableAmount), muted: true),
+          _row(
+            'Tax (${Fmt.percent(taxPercent)}%)',
+            Fmt.money(totals.tax),
+            muted: true,
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Divider(),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Total',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
               ),
-              child: Column(
-                children: [
-                  buildSummaryRow(context, 'Subtotal', subtotal),
-                  if (discount > 0)
-                    buildSummaryRow(context, 'Discount', -discount),
-                  buildSummaryRow(context, 'Taxable Amount', taxableAmount),
-                  buildSummaryRow(
-                    context,
-                    'Tax (${(taxRate * 100).toStringAsFixed(1)}%)',
-                    tax,
-                  ),
-                  Divider(thickness: 1, color: Colors.grey.shade300),
-                  buildSummaryRow(context, 'Total', total, isTotal: true),
-                ],
+              Text(
+                Fmt.money(totals.total),
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
+        ],
       ),
     );
   }
